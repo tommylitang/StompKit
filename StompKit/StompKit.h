@@ -90,6 +90,9 @@ typedef void (^STOMPMessageHandler)(STOMPMessage *message);
 
 - (id)initWithHost:(NSString *)theHost
 			  port:(NSUInteger)thePort;
+- (id)initWithHost:(NSString *)theHost
+              port:(NSUInteger)thePort
+             virtualHost:(NSString *)theVhost;
 
 - (void)connectWithLogin:(NSString *)login
                 passcode:(NSString *)passcode

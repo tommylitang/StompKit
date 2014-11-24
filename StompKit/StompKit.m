@@ -55,6 +55,7 @@
 
 @property (nonatomic, retain) GCDAsyncSocket *socket;
 @property (nonatomic, copy) NSString *host;
+@property (nonatomic, copy) NSString *vhost;
 @property (nonatomic) NSUInteger port;
 @property (nonatomic) NSString *clientHeartBeat;
 @property (nonatomic, weak) NSTimer *pinger;
@@ -298,7 +299,7 @@
 
 @implementation STOMPClient
 
-@synthesize socket, host, port;
+@synthesize socket, host, port, vhost;
 @synthesize connectionCompletionHandler, disconnectedHandler, receiptHandler, errorHandler;
 @synthesize subscriptions;
 @synthesize pinger, ponger;
@@ -315,6 +316,7 @@ CFAbsoluteTime serverActivity;
         self.socket = [[GCDAsyncSocket alloc] initWithDelegate:self
                                                  delegateQueue:dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)];
         self.host = aHost;
+        self.vhost = @"/";
         self.port = aPort;
         idGenerator = 0;
         self.connected = NO;
@@ -322,6 +324,14 @@ CFAbsoluteTime serverActivity;
         self.clientHeartBeat = @"5000,10000";
 	}
 	return self;
+}
+
+- (id)initWithHost:(NSString *)aHost
+              port:(NSUInteger)aPort virtualHost:(NSString *)aVhost {
+    if(self = [self initWithHost:aHost port:aPort]) {
+        self.vhost = aVhost;
+    }
+    return self;
 }
 
 - (void)connectWithLogin:(NSString *)login
@@ -345,7 +355,7 @@ CFAbsoluteTime serverActivity;
     NSMutableDictionary *connectHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
     connectHeaders[kHeaderAcceptVersion] = kVersion1_2;
     if (!connectHeaders[kHeaderHost]) {
-        connectHeaders[kHeaderHost] = host;
+        connectHeaders[kHeaderHost] = vhost;
     }
     if (!connectHeaders[kHeaderHeartBeat]) {
         connectHeaders[kHeaderHeartBeat] = self.clientHeartBeat;
