@@ -9,15 +9,19 @@
 #import "StompKit.h"
 #import "GCDAsyncSocket.h"
 
+#import <CocoaLumberjack/DDLog.h>
+
+extern int ddLogLevel;
+
 #define kDefaultTimeout 5
 #define kVersion1_2 @"1.2"
 #define kNoHeartBeat @"0,0"
 
 #pragma mark Logging macros
 
-#if 0 // set to 1 to enable logs
+#if 1 // set to 1 to enable logs
 
-#define LogDebug(frmt, ...) NSLog(frmt, ##__VA_ARGS__);
+#define LogDebug(frmt, ...) DDLogVerbose(frmt, ##__VA_ARGS__);
 
 #else
 
@@ -44,14 +48,14 @@
 
 #pragma mark Control characters
 
-#define	kLineFeed @"\x0A"
-#define	kNullChar @"\x00"
+#define kLineFeed @"\x0A"
+#define kNullChar @"\x00"
 #define kHeaderSeparator @":"
 
 #pragma mark -
 #pragma mark STOMP Client private interface
 
-@interface STOMPClient()
+@interface STOMPClient() <GCDAsyncSocketDelegate>
 
 @property (nonatomic, retain) GCDAsyncSocket *socket;
 @property (nonatomic, copy) NSString *host;
@@ -100,13 +104,13 @@
 
 - (NSString *)toString {
     NSMutableString *frame = [NSMutableString stringWithString: [self.command stringByAppendingString:kLineFeed]];
-	for (id key in self.headers) {
+  for (id key in self.headers) {
         [frame appendString:[NSString stringWithFormat:@"%@%@%@%@", key, kHeaderSeparator, self.headers[key], kLineFeed]];
-	}
+  }
     [frame appendString:kLineFeed];
-	if (self.body) {
-		[frame appendString:self.body];
-	}
+  if (self.body) {
+    [frame appendString:self.body];
+  }
     [frame appendString:kNullChar];
     return frame;
 }
@@ -117,38 +121,44 @@
 
 + (STOMPFrame *) STOMPFrameFromData:(NSData *)data {
     NSData *strData = [data subdataWithRange:NSMakeRange(0, [data length])];
-	NSString *msg = [[NSString alloc] initWithData:strData encoding:NSUTF8StringEncoding];
+  NSString *msg = [[NSString alloc] initWithData:strData encoding:NSUTF8StringEncoding];
     LogDebug(@"<<< %@", msg);
-    NSMutableArray *contents = (NSMutableArray *)[[msg componentsSeparatedByString:kLineFeed] mutableCopy];
-    while ([contents count] > 0 && [contents[0] isEqual:@""]) {
-        [contents removeObjectAtIndex:0];
+    
+    NSScanner *msgScanner = [NSScanner scannerWithString:msg];
+    NSCharacterSet *lineFeedCharacterSet = [NSCharacterSet characterSetWithCharactersInString:kLineFeed];
+    NSCharacterSet *headerSeparatorCharacterSet = [NSCharacterSet characterSetWithCharactersInString:[kHeaderSeparator stringByAppendingString:kLineFeed]];
+    
+    [msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
+    
+    NSString *command = nil;
+    [msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&command];
+    
+    NSString *headerKey = nil, *headerValue = nil;
+    //NSString *header = nil;
+    NSMutableDictionary *headers = [[NSMutableDictionary alloc] init];
+    msgScanner.charactersToBeSkipped = nil;
+    [msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
+    /*while ([msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&header]) {
+        msgScanner.scanLocation++;
+        //[msgScanner scanUpToCharactersFromSet:headerSeparatorCharacterSet intoString:&headerKey];
+        //[msgScanner scanCharactersFromSet:headerSeparatorCharacterSet intoString:NULL];
+        //[msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
+        //[msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
+        //headers[headerKey] = headerValue;
+    }*/
+    while (YES) {
+        if (![msgScanner scanUpToCharactersFromSet:headerSeparatorCharacterSet intoString:&headerKey])
+            break;
+        msgScanner.scanLocation++;
+        [msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
+        msgScanner.scanLocation++;
+        headers[headerKey] = headerValue;
     }
-	NSString *command = [[contents objectAtIndex:0] copy];
-	NSMutableDictionary *headers = [[NSMutableDictionary alloc] init];
-	NSMutableString *body = [[NSMutableString alloc] init];
-	BOOL hasHeaders = NO;
-    [contents removeObjectAtIndex:0];
-	for(NSString *line in contents) {
-		if(hasHeaders) {
-            for (int i=0; i < [line length]; i++) {
-                unichar c = [line characterAtIndex:i];
-                if (c != '\x00') {
-                    [body appendString:[NSString stringWithFormat:@"%c", c]];
-                }
-            }
-		} else {
-			if ([line isEqual:@""]) {
-				hasHeaders = YES;
-			} else {
-				NSMutableArray *parts = [NSMutableArray arrayWithArray:[line componentsSeparatedByString:kHeaderSeparator]];
-				// key ist the first part
-				NSString *key = parts[0];
-                [parts removeObjectAtIndex:0];
-                headers[key] = [parts componentsJoinedByString:kHeaderSeparator];
-			}
-		}
-	}
-    return [[STOMPFrame alloc] initWithCommand:command headers:headers body:body];
+    NSString *body = nil;
+    msgScanner.scanLocation++;
+    [msgScanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:kNullChar] intoString:&body];
+
+    return [[STOMPFrame alloc] initWithCommand:command headers:headers body:body ?: @""];
 }
 
 - (NSString *)description {
@@ -322,8 +332,8 @@ CFAbsoluteTime serverActivity;
         self.connected = NO;
         self.subscriptions = [[NSMutableDictionary alloc] init];
         self.clientHeartBeat = @"5000,10000";
-	}
-	return self;
+  }
+  return self;
 }
 
 - (id)initWithHost:(NSString *)aHost
@@ -378,10 +388,10 @@ CFAbsoluteTime serverActivity;
 - (void)sendTo:(NSString *)destination
        headers:(NSDictionary *)headers
           body:(NSString *)body {
-	NSMutableDictionary *msgHeaders = [NSMutableDictionary dictionaryWithDictionary:headers];
+  NSMutableDictionary *msgHeaders = [NSMutableDictionary dictionaryWithDictionary:headers];
     msgHeaders[kHeaderDestination] = destination;
     if (body) {
-        msgHeaders[kHeaderContentLength] = [NSNumber numberWithLong:[body length]];
+        msgHeaders[kHeaderContentLength] = [NSNumber numberWithLong:[body lengthOfBytesUsingEncoding:NSUTF8StringEncoding]];
     }
     [self sendFrameWithCommand:kCommandSend
                        headers:msgHeaders
@@ -398,7 +408,7 @@ CFAbsoluteTime serverActivity;
 - (STOMPSubscription *)subscribeTo:(NSString *)destination
                            headers:(NSDictionary *)headers
                     messageHandler:(STOMPMessageHandler)handler {
-	NSMutableDictionary *subHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
+  NSMutableDictionary *subHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
     subHeaders[kHeaderDestination] = destination;
     NSString *identifier = subHeaders[kHeaderID];
     if (!identifier) {
@@ -522,7 +532,7 @@ CFAbsoluteTime serverActivity;
             self.connectionCompletionHandler(frame, nil);
         }
     // MESSAGE
-	} else if([kCommandMessage isEqual:frame.command]) {
+  } else if([kCommandMessage isEqual:frame.command]) {
         STOMPMessageHandler handler = self.subscriptions[frame.headers[kHeaderSubscription]];
         if (handler) {
             STOMPMessage *message = [STOMPMessage STOMPMessageFromFrame:frame
@@ -532,12 +542,12 @@ CFAbsoluteTime serverActivity;
             //TODO default handler
         }
         // RECEIPT
-	} else if([kCommandReceipt isEqual:frame.command]) {
+  } else if([kCommandReceipt isEqual:frame.command]) {
         if (self.receiptHandler) {
             self.receiptHandler(frame);
         }
         // ERROR
-	} else if([kCommandError isEqual:frame.command]) {
+  } else if([kCommandError isEqual:frame.command]) {
         NSError *error = [[NSError alloc] initWithDomain:@"StompKit" code:1 userInfo:@{@"frame": frame}];
         // ERROR coming after the CONNECT frame
         if (!self.connected && self.connectionCompletionHandler) {
@@ -547,7 +557,7 @@ CFAbsoluteTime serverActivity;
         } else {
             LogDebug(@"Unhandled ERROR frame: %@", frame);
         }
-	} else {
+  } else {
         NSError *error = [[NSError alloc] initWithDomain:@"StompKit"
                                                     code:2
                                                 userInfo:@{@"message": [NSString stringWithFormat:@"Unknown frame %@", frame.command],
@@ -559,11 +569,15 @@ CFAbsoluteTime serverActivity;
 }
 
 - (void)readFrame {
-	[[self socket] readDataToData:[GCDAsyncSocket ZeroData] withTimeout:-1 tag:0];
+  [[self socket] readDataToData:[GCDAsyncSocket ZeroData] withTimeout:-1 tag:0];
 }
 
 #pragma mark -
 #pragma mark GCDAsyncSocketDelegate
+- (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag
+{
+    DDLogDebug(@"didWriteDataWithTag: %ld", tag);
+}
 
 - (void)socket:(GCDAsyncSocket *)sock
    didReadData:(NSData *)data
