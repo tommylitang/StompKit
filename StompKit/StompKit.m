@@ -11,6 +11,8 @@
 
 #import <CocoaLumberjack/DDLog.h>
 
+#define ENABLE_BACKGROUNDING  0
+
 extern int ddLogLevel;
 
 #define kDefaultTimeout 5
@@ -48,8 +50,8 @@ extern int ddLogLevel;
 
 #pragma mark Control characters
 
-#define kLineFeed @"\x0A"
-#define kNullChar @"\x00"
+#define	kLineFeed @"\x0A"
+#define	kNullChar @"\x00"
 #define kHeaderSeparator @":"
 
 #pragma mark -
@@ -64,6 +66,8 @@ extern int ddLogLevel;
 @property (nonatomic) NSString *clientHeartBeat;
 @property (nonatomic, weak) NSTimer *pinger;
 @property (nonatomic, weak) NSTimer *ponger;
+
+@property (nonatomic, strong) NSDictionary *connectHeaderDictionary;
 
 @property (nonatomic, copy) void (^disconnectedHandler)(NSError *error);
 @property (nonatomic, copy) void (^connectionCompletionHandler)(STOMPFrame *connectedFrame, NSError *error);
@@ -104,13 +108,13 @@ extern int ddLogLevel;
 
 - (NSString *)toString {
     NSMutableString *frame = [NSMutableString stringWithString: [self.command stringByAppendingString:kLineFeed]];
-  for (id key in self.headers) {
+    for (id key in self.headers) {
         [frame appendString:[NSString stringWithFormat:@"%@%@%@%@", key, kHeaderSeparator, self.headers[key], kLineFeed]];
-  }
+    }
     [frame appendString:kLineFeed];
-  if (self.body) {
-    [frame appendString:self.body];
-  }
+    if (self.body) {
+        [frame appendString:self.body];
+    }
     [frame appendString:kNullChar];
     return frame;
 }
@@ -121,7 +125,7 @@ extern int ddLogLevel;
 
 + (STOMPFrame *) STOMPFrameFromData:(NSData *)data {
     NSData *strData = [data subdataWithRange:NSMakeRange(0, [data length])];
-  NSString *msg = [[NSString alloc] initWithData:strData encoding:NSUTF8StringEncoding];
+    NSString *msg = [[NSString alloc] initWithData:strData encoding:NSUTF8StringEncoding];
     LogDebug(@"<<< %@", msg);
     
     NSScanner *msgScanner = [NSScanner scannerWithString:msg];
@@ -139,13 +143,13 @@ extern int ddLogLevel;
     msgScanner.charactersToBeSkipped = nil;
     [msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
     /*while ([msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&header]) {
-        msgScanner.scanLocation++;
-        //[msgScanner scanUpToCharactersFromSet:headerSeparatorCharacterSet intoString:&headerKey];
-        //[msgScanner scanCharactersFromSet:headerSeparatorCharacterSet intoString:NULL];
-        //[msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
-        //[msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
-        //headers[headerKey] = headerValue;
-    }*/
+     msgScanner.scanLocation++;
+     //[msgScanner scanUpToCharactersFromSet:headerSeparatorCharacterSet intoString:&headerKey];
+     //[msgScanner scanCharactersFromSet:headerSeparatorCharacterSet intoString:NULL];
+     //[msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
+     //[msgScanner scanCharactersFromSet:lineFeedCharacterSet intoString:NULL];
+     //headers[headerKey] = headerValue;
+     }*/
     while (YES) {
         if (![msgScanner scanUpToCharactersFromSet:headerSeparatorCharacterSet intoString:&headerKey])
             break;
@@ -157,7 +161,7 @@ extern int ddLogLevel;
     NSString *body = nil;
     msgScanner.scanLocation++;
     [msgScanner scanUpToCharactersFromSet:[NSCharacterSet characterSetWithCharactersInString:kNullChar] intoString:&body];
-
+    
     return [[STOMPFrame alloc] initWithCommand:command headers:headers body:body ?: @""];
 }
 
@@ -332,8 +336,8 @@ CFAbsoluteTime serverActivity;
         self.connected = NO;
         self.subscriptions = [[NSMutableDictionary alloc] init];
         self.clientHeartBeat = @"5000,10000";
-  }
-  return self;
+    }
+    return self;
 }
 
 - (id)initWithHost:(NSString *)aHost
@@ -354,28 +358,15 @@ CFAbsoluteTime serverActivity;
 - (void)connectWithHeaders:(NSDictionary *)headers
          completionHandler:(void (^)(STOMPFrame *connectedFrame, NSError *error))completionHandler {
     self.connectionCompletionHandler = completionHandler;
-
+    
     NSError *err;
     if(![self.socket connectToHost:host onPort:port error:&err]) {
         if (self.connectionCompletionHandler) {
             self.connectionCompletionHandler(nil, err);
         }
-    }
-
-    NSMutableDictionary *connectHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
-    connectHeaders[kHeaderAcceptVersion] = kVersion1_2;
-    if (!connectHeaders[kHeaderHost]) {
-        connectHeaders[kHeaderHost] = vhost;
-    }
-    if (!connectHeaders[kHeaderHeartBeat]) {
-        connectHeaders[kHeaderHeartBeat] = self.clientHeartBeat;
     } else {
-        self.clientHeartBeat = connectHeaders[kHeaderHeartBeat];
+        self.connectHeaderDictionary = headers;
     }
-
-    [self sendFrameWithCommand:kCommandConnect
-                       headers:connectHeaders
-                          body: nil];
 }
 
 - (void)sendTo:(NSString *)destination
@@ -388,7 +379,7 @@ CFAbsoluteTime serverActivity;
 - (void)sendTo:(NSString *)destination
        headers:(NSDictionary *)headers
           body:(NSString *)body {
-  NSMutableDictionary *msgHeaders = [NSMutableDictionary dictionaryWithDictionary:headers];
+    NSMutableDictionary *msgHeaders = [NSMutableDictionary dictionaryWithDictionary:headers];
     msgHeaders[kHeaderDestination] = destination;
     if (body) {
         msgHeaders[kHeaderContentLength] = [NSNumber numberWithLong:[body lengthOfBytesUsingEncoding:NSUTF8StringEncoding]];
@@ -408,7 +399,7 @@ CFAbsoluteTime serverActivity;
 - (STOMPSubscription *)subscribeTo:(NSString *)destination
                            headers:(NSDictionary *)headers
                     messageHandler:(STOMPMessageHandler)handler {
-  NSMutableDictionary *subHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
+    NSMutableDictionary *subHeaders = [[NSMutableDictionary alloc] initWithDictionary:headers];
     subHeaders[kHeaderDestination] = destination;
     NSString *identifier = subHeaders[kHeaderID];
     if (!identifier) {
@@ -476,7 +467,7 @@ CFAbsoluteTime serverActivity;
 - (void)checkPong:(NSTimer *)timer  {
     NSDictionary *dict = timer.userInfo;
     NSInteger ttl = [dict[@"ttl"] intValue];
-
+    
     CFAbsoluteTime delta = CFAbsoluteTimeGetCurrent() - serverActivity;
     if (delta > (ttl * 2)) {
         LogDebug(@"did not receive server activity for the last %f seconds", delta);
@@ -487,23 +478,23 @@ CFAbsoluteTime serverActivity;
 - (void)setupHeartBeatWithClient:(NSString *)clientValues
                           server:(NSString *)serverValues {
     NSInteger cx, cy, sx, sy;
-
+    
     NSScanner *scanner = [NSScanner scannerWithString:clientValues];
     scanner.charactersToBeSkipped = [NSCharacterSet characterSetWithCharactersInString:@", "];
     [scanner scanInteger:&cx];
     [scanner scanInteger:&cy];
-
+    
     scanner = [NSScanner scannerWithString:serverValues];
     scanner.charactersToBeSkipped = [NSCharacterSet characterSetWithCharactersInString:@", "];
     [scanner scanInteger:&sx];
     [scanner scanInteger:&sy];
-
+    
     NSInteger pingTTL = ceil(MAX(cx, sy) / 1000);
     NSInteger pongTTL = ceil(MAX(sx, cy) / 1000);
-
+    
     LogDebug(@"send heart-beat every %ld seconds", pingTTL);
     LogDebug(@"expect to receive heart-beats every %ld seconds", pongTTL);
-
+    
     dispatch_async(dispatch_get_main_queue(), ^{
         if (pingTTL > 0) {
             self.pinger = [NSTimer scheduledTimerWithTimeInterval: pingTTL
@@ -520,7 +511,7 @@ CFAbsoluteTime serverActivity;
                                                           repeats: YES];
         }
     });
-
+    
 }
 
 - (void)receivedFrame:(STOMPFrame *)frame {
@@ -531,8 +522,8 @@ CFAbsoluteTime serverActivity;
         if (self.connectionCompletionHandler) {
             self.connectionCompletionHandler(frame, nil);
         }
-    // MESSAGE
-  } else if([kCommandMessage isEqual:frame.command]) {
+        // MESSAGE
+    } else if([kCommandMessage isEqual:frame.command]) {
         STOMPMessageHandler handler = self.subscriptions[frame.headers[kHeaderSubscription]];
         if (handler) {
             STOMPMessage *message = [STOMPMessage STOMPMessageFromFrame:frame
@@ -542,12 +533,12 @@ CFAbsoluteTime serverActivity;
             //TODO default handler
         }
         // RECEIPT
-  } else if([kCommandReceipt isEqual:frame.command]) {
+    } else if([kCommandReceipt isEqual:frame.command]) {
         if (self.receiptHandler) {
             self.receiptHandler(frame);
         }
         // ERROR
-  } else if([kCommandError isEqual:frame.command]) {
+    } else if([kCommandError isEqual:frame.command]) {
         NSError *error = [[NSError alloc] initWithDomain:@"StompKit" code:1 userInfo:@{@"frame": frame}];
         // ERROR coming after the CONNECT frame
         if (!self.connected && self.connectionCompletionHandler) {
@@ -557,7 +548,7 @@ CFAbsoluteTime serverActivity;
         } else {
             LogDebug(@"Unhandled ERROR frame: %@", frame);
         }
-  } else {
+    } else {
         NSError *error = [[NSError alloc] initWithDomain:@"StompKit"
                                                     code:2
                                                 userInfo:@{@"message": [NSString stringWithFormat:@"Unknown frame %@", frame.command],
@@ -569,7 +560,7 @@ CFAbsoluteTime serverActivity;
 }
 
 - (void)readFrame {
-  [[self socket] readDataToData:[GCDAsyncSocket ZeroData] withTimeout:-1 tag:0];
+    [[self socket] readDataToData:[GCDAsyncSocket ZeroData] withTimeout:-1 tag:0];
 }
 
 #pragma mark -
@@ -594,6 +585,109 @@ CFAbsoluteTime serverActivity;
 }
 
 - (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port {
+    
+    
+    if (self.sslEnabled) {
+        // Connected to secure server (HTTPS)
+        
+#if ENABLE_BACKGROUNDING && !TARGET_IPHONE_SIMULATOR
+        {
+            // Backgrounding doesn't seem to be supported on the simulator yet
+            
+            [sock performBlock:^{
+                if ([sock enableBackgroundingOnSocket])
+                    DDLogInfo(@"Enabled backgrounding on socket");
+                else
+                    DDLogWarn(@"Enabling backgrounding failed!");
+            }];
+        }
+#endif
+        
+        // Configure SSL/TLS settings
+        NSMutableDictionary *settings = [NSMutableDictionary dictionaryWithCapacity:3];
+        
+        // If you simply want to ensure that the remote host's certificate is valid,
+        // then you can use an empty dictionary.
+        
+        // If you know the name of the remote host, then you should specify the name here.
+        //
+        // NOTE:
+        // You should understand the security implications if you do not specify the peer name.
+        // Please see the documentation for the startTLS method in GCDAsyncSocket.h for a full discussion.
+        
+        [settings setObject:self.host forKey:(NSString *)kCFStreamSSLPeerName];
+        
+        //[settings setObject:@YES forKey:GCDAsyncSocketManuallyEvaluateTrust];
+        
+        //[settings setObject:@(kTLSProtocol12) forKey:GCDAsyncSocketSSLProtocolVersionMin];
+        //[settings setObject:@(kTLSProtocol12) forKey:GCDAsyncSocketSSLProtocolVersionMax];
+        
+        // To connect to a test server, with a self-signed certificate, use settings similar to this:
+        
+        //	// Allow expired certificates
+        //	[settings setObject:[NSNumber numberWithBool:YES]
+        //				 forKey:(NSString *)kCFStreamSSLAllowsExpiredCertificates];
+        //
+        //	// Allow self-signed certificates
+        //	[settings setObject:[NSNumber numberWithBool:YES]
+        //				 forKey:(NSString *)kCFStreamSSLAllowsAnyRoot];
+        //
+        //	// In fact, don't even validate the certificate chain
+        //	[settings setObject:[NSNumber numberWithBool:NO]
+        //				 forKey:(NSString *)kCFStreamSSLValidatesCertificateChain];
+        
+        DDLogInfo(@"Starting TLS with settings:\n%@", settings);
+        
+        [sock startTLS:settings];
+        
+        // You can also pass nil to the startTLS method, which is the same as passing an empty dictionary.
+        // Again, you should understand the security implications of doing so.
+        // Please see the documentation for the startTLS method in GCDAsyncSocket.h for a full discussion.
+        
+    } else {
+        // Connected to normal server (HTTP)
+        
+#if ENABLE_BACKGROUNDING && !TARGET_IPHONE_SIMULATOR
+        {
+            // Backgrounding doesn't seem to be supported on the simulator yet
+            
+            [sock performBlock:^{
+                if ([sock enableBackgroundingOnSocket])
+                    DDLogInfo(@"Enabled backgrounding on socket");
+                else
+                    DDLogWarn(@"Enabling backgrounding failed!");
+            }];
+        }
+#endif
+        
+        [self socketDidSecure:nil];
+    }
+}
+
+- (void)socket:(GCDAsyncSocket *)sock didReceiveTrust:(SecTrustRef)trust completionHandler:(void (^)(BOOL shouldTrustPeer))completionHandler
+{
+    completionHandler(YES);
+}
+
+- (void)socketDidSecure:(GCDAsyncSocket *)sock
+{
+    DDLogInfo(@"socketDidSecure:%p", sock);
+    
+    NSMutableDictionary *connectHeaders = [[NSMutableDictionary alloc] initWithDictionary:self.connectHeaderDictionary];
+    connectHeaders[kHeaderAcceptVersion] = kVersion1_2;
+    if (!connectHeaders[kHeaderHost]) {
+        connectHeaders[kHeaderHost] = vhost;
+    }
+    if (!connectHeaders[kHeaderHeartBeat]) {
+        connectHeaders[kHeaderHeartBeat] = self.clientHeartBeat;
+    } else {
+        self.clientHeartBeat = connectHeaders[kHeaderHeartBeat];
+    }
+    
+    [self sendFrameWithCommand:kCommandConnect
+                       headers:connectHeaders
+                          body: nil];
+    
     [self readFrame];
 }
 

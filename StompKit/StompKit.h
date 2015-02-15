@@ -87,12 +87,13 @@ typedef void (^STOMPMessageHandler)(STOMPMessage *message);
 @property (nonatomic, copy) STOMPFrameHandler receiptHandler;
 @property (nonatomic, copy) void (^errorHandler)(NSError *error);
 @property (nonatomic, assign) BOOL connected;
+@property (nonatomic, assign) BOOL sslEnabled;
 
 - (id)initWithHost:(NSString *)theHost
-			  port:(NSUInteger)thePort;
+              port:(NSUInteger)thePort;
 - (id)initWithHost:(NSString *)theHost
               port:(NSUInteger)thePort
-             virtualHost:(NSString *)theVhost;
+       virtualHost:(NSString *)theVhost;
 
 - (void)connectWithLogin:(NSString *)login
                 passcode:(NSString *)passcode
