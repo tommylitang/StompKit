@@ -109,7 +109,8 @@ extern int ddLogLevel;
 - (NSString *)toString {
     NSMutableString *frame = [NSMutableString stringWithString: [self.command stringByAppendingString:kLineFeed]];
     for (id key in self.headers) {
-        [frame appendString:[NSString stringWithFormat:@"%@%@%@%@", key, kHeaderSeparator, self.headers[key], kLineFeed]];
+        NSString *escapedHeaderValue = [[self.headers[key] description] stringByReplacingOccurrencesOfString:kHeaderSeparator withString:@"\\c"];
+        [frame appendString:[NSString stringWithFormat:@"%@%@%@%@", key, kHeaderSeparator, escapedHeaderValue, kLineFeed]];
     }
     [frame appendString:kLineFeed];
     if (self.body) {
@@ -156,7 +157,9 @@ extern int ddLogLevel;
         msgScanner.scanLocation++;
         [msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
         msgScanner.scanLocation++;
-        headers[headerKey] = headerValue;
+        
+        NSString *unescapedHeaderValue = [headerValue stringByReplacingOccurrencesOfString:@"\\c" withString:kHeaderSeparator];
+        headers[headerKey] = unescapedHeaderValue;
     }
     NSString *body = nil;
     msgScanner.scanLocation++;
