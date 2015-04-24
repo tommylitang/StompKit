@@ -500,18 +500,22 @@ CFAbsoluteTime serverActivity;
     
     dispatch_async(dispatch_get_main_queue(), ^{
         if (pingTTL > 0) {
-            self.pinger = [NSTimer scheduledTimerWithTimeInterval: pingTTL
+            NSTimer *_pinger = [NSTimer timerWithTimeInterval: pingTTL
                                                            target: self
                                                          selector: @selector(sendPing:)
                                                          userInfo: nil
                                                           repeats: YES];
+            [[NSRunLoop mainRunLoop] addTimer:_pinger forMode:NSRunLoopCommonModes];
+            self.pinger = _pinger;
         }
         if (pongTTL > 0) {
-            self.ponger = [NSTimer scheduledTimerWithTimeInterval: pongTTL
+            NSTimer *_ponger = [NSTimer timerWithTimeInterval: pongTTL
                                                            target: self
                                                          selector: @selector(checkPong:)
                                                          userInfo: @{@"ttl": [NSNumber numberWithInteger:pongTTL]}
                                                           repeats: YES];
+            [[NSRunLoop mainRunLoop] addTimer:_ponger forMode:NSRunLoopCommonModes];
+            self.ponger = _ponger;
         }
     });
     
