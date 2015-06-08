@@ -220,10 +220,12 @@ extern int ddLogLevel;
 - (void)ackWithCommand: (NSString *)command
                headers: (NSDictionary *)theHeaders {
     NSMutableDictionary *ackHeaders = [[NSMutableDictionary alloc] initWithDictionary:theHeaders];
-    ackHeaders[kHeaderID] = self.headers[kHeaderAck];
-    [self.client sendFrameWithCommand:command
-                              headers:ackHeaders
-                                 body:nil];
+    if (self.headers[kHeaderAck]) {
+        ackHeaders[kHeaderID] = self.headers[kHeaderAck];
+        [self.client sendFrameWithCommand:command
+                                  headers:ackHeaders
+                                     body:nil];
+    }
 }
 
 + (STOMPMessage *)STOMPMessageFromFrame:(STOMPFrame *)frame
@@ -501,21 +503,25 @@ CFAbsoluteTime serverActivity;
     dispatch_async(dispatch_get_main_queue(), ^{
         if (pingTTL > 0) {
             NSTimer *_pinger = [NSTimer timerWithTimeInterval: pingTTL
-                                                           target: self
-                                                         selector: @selector(sendPing:)
-                                                         userInfo: nil
-                                                          repeats: YES];
+                                                       target: self
+                                                     selector: @selector(sendPing:)
+                                                     userInfo: nil
+                                                      repeats: YES];
             [[NSRunLoop mainRunLoop] addTimer:_pinger forMode:NSRunLoopCommonModes];
+            [self.pinger invalidate];
             self.pinger = _pinger;
+            [_pinger fire];
         }
         if (pongTTL > 0) {
             NSTimer *_ponger = [NSTimer timerWithTimeInterval: pongTTL
-                                                           target: self
-                                                         selector: @selector(checkPong:)
-                                                         userInfo: @{@"ttl": [NSNumber numberWithInteger:pongTTL]}
-                                                          repeats: YES];
+                                                       target: self
+                                                     selector: @selector(checkPong:)
+                                                     userInfo: @{@"ttl": [NSNumber numberWithInteger:pongTTL]}
+                                                      repeats: YES];
             [[NSRunLoop mainRunLoop] addTimer:_ponger forMode:NSRunLoopCommonModes];
+            [self.ponger invalidate];
             self.ponger = _ponger;
+            [_ponger fire];
         }
     });
     
@@ -624,6 +630,9 @@ CFAbsoluteTime serverActivity;
         
         [settings setObject:self.host forKey:(NSString *)kCFStreamSSLPeerName];
         
+#if TARGET_OS_IPHONE
+        [settings setObject:@YES forKey:GCDAsyncSocketUseCFStreamForTLS];
+#endif
         //[settings setObject:@YES forKey:GCDAsyncSocketManuallyEvaluateTrust];
         
         //[settings setObject:@(kTLSProtocol12) forKey:GCDAsyncSocketSSLProtocolVersionMin];
