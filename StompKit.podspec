@@ -10,5 +10,5 @@ Pod::Spec.new do |s|
   s.source_files = 'StompKit/*.{h,m}'
   s.public_header_files = 'StompKit/StompKit.h'
   s.requires_arc = true
-  s.dependency 'CocoaAsyncSocket', '7.4.1'
+  s.dependency 'CocoaAsyncSocket', '7.4.2'
 end
