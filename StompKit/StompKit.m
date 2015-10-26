@@ -57,6 +57,30 @@ extern int ddLogLevel;
 #pragma mark -
 #pragma mark STOMP Client private interface
 
+@implementation NSString (STOMPExtension)
+
+- (NSString *)stomp_escapedString
+{
+    NSMutableString *mutableString = [self mutableCopy];
+    [mutableString replaceOccurrencesOfString:@"\\" withString:@"\\\\" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@":" withString:@"\\c" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@"\n" withString:@"\\n" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@"\r" withString:@"\\r" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    return [NSString stringWithString:mutableString];
+}
+
+- (NSString *)stomp_unescapedString
+{
+    NSMutableString *mutableString = [self mutableCopy];
+    [mutableString replaceOccurrencesOfString:@"\\\\" withString:@"\\" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@"\\c" withString:@":" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@"\\n" withString:@"\n" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    [mutableString replaceOccurrencesOfString:@"\\r" withString:@"\r" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    return [NSString stringWithString:mutableString];
+}
+
+@end
+
 @interface STOMPClient() <GCDAsyncSocketDelegate>
 
 @property (nonatomic, retain) GCDAsyncSocket *socket;
@@ -109,7 +133,7 @@ extern int ddLogLevel;
 - (NSString *)toString {
     NSMutableString *frame = [NSMutableString stringWithString: [self.command stringByAppendingString:kLineFeed]];
     for (id key in self.headers) {
-        NSString *escapedHeaderValue = [[self.headers[key] description] stringByReplacingOccurrencesOfString:kHeaderSeparator withString:@"\\c"];
+        NSString *escapedHeaderValue = [[self.headers[key] description] stomp_escapedString];
         [frame appendString:[NSString stringWithFormat:@"%@%@%@%@", key, kHeaderSeparator, escapedHeaderValue, kLineFeed]];
     }
     [frame appendString:kLineFeed];
@@ -158,7 +182,7 @@ extern int ddLogLevel;
         [msgScanner scanUpToCharactersFromSet:lineFeedCharacterSet intoString:&headerValue];
         msgScanner.scanLocation++;
         
-        NSString *unescapedHeaderValue = [headerValue stringByReplacingOccurrencesOfString:@"\\c" withString:kHeaderSeparator];
+        NSString *unescapedHeaderValue = [headerValue stomp_unescapedString];
         headers[headerKey] = unescapedHeaderValue;
     }
     NSString *body = nil;
@@ -580,7 +604,7 @@ CFAbsoluteTime serverActivity;
 #pragma mark GCDAsyncSocketDelegate
 - (void)socket:(GCDAsyncSocket *)sock didWriteDataWithTag:(long)tag
 {
-    DDLogDebug(@"didWriteDataWithTag: %ld", tag);
+    DDLogVerbose(@"didWriteDataWithTag: %ld", tag);
 }
 
 - (void)socket:(GCDAsyncSocket *)sock
