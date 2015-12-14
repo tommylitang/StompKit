@@ -71,11 +71,33 @@ extern int ddLogLevel;
 
 - (NSString *)stomp_unescapedString
 {
+    NSString *str = self;
     NSMutableString *mutableString = [self mutableCopy];
-    [mutableString replaceOccurrencesOfString:@"\\\\" withString:@"\\" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
-    [mutableString replaceOccurrencesOfString:@"\\c" withString:@":" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
-    [mutableString replaceOccurrencesOfString:@"\\n" withString:@"\n" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
-    [mutableString replaceOccurrencesOfString:@"\\r" withString:@"\r" options:NSLiteralSearch range:NSMakeRange(0, [mutableString length])];
+    NSUInteger len = [str length];
+    unichar buffer[len+1];
+    [str getCharacters:buffer range:NSMakeRange(0, len)];
+    for (int i = 0; i < len; i++) {
+        unichar c = buffer[i];
+        if (c == '\\') {
+            unichar nextC = buffer[++i];
+            switch (nextC) {
+                case '\\':
+                    [mutableString replaceCharactersInRange:NSMakeRange(i-1, 1) withString:@"\\"];
+                     break;
+                case 'c':
+                    [mutableString replaceCharactersInRange:NSMakeRange(i-1, 1) withString:@":"];
+                    break;
+                case 'n':
+                    [mutableString replaceCharactersInRange:NSMakeRange(i-1, 1) withString:@"\n"];
+                    break;
+                case 'r':
+                    [mutableString replaceCharactersInRange:NSMakeRange(i-1, 1) withString:@"\r"];
+                    break;
+            }
+        } else {
+            //[mutableString appendFormat:@"%C", c];
+        }
+    }
     return [NSString stringWithString:mutableString];
 }
 
@@ -466,7 +488,7 @@ CFAbsoluteTime serverActivity;
     [self.subscriptions removeAllObjects];
     [self.pinger invalidate];
     [self.ponger invalidate];
-    [self.socket disconnectAfterReadingAndWriting];
+    [self.socket disconnect];
 }
 
 
@@ -537,7 +559,7 @@ CFAbsoluteTime serverActivity;
             [_pinger fire];
         }
         if (pongTTL > 0) {
-            NSTimer *_ponger = [NSTimer timerWithTimeInterval: pongTTL
+            NSTimer *_ponger = [NSTimer timerWithTimeInterval: 1
                                                        target: self
                                                      selector: @selector(checkPong:)
                                                      userInfo: @{@"ttl": [NSNumber numberWithInteger:pongTTL]}
@@ -733,7 +755,7 @@ CFAbsoluteTime serverActivity;
 
 - (void)socketDidDisconnect:(GCDAsyncSocket *)sock
                   withError:(NSError *)err {
-    LogDebug(@"socket did disconnect");
+    DDLogError(@"socket did disconnect: %@", err);
     if (!self.connected && self.connectionCompletionHandler) {
         self.connectionCompletionHandler(nil, err);
     } else if (self.connected) {
